@@ -33,3 +33,13 @@ Major interaction overhaul:
 
 1. **Internal copy/paste** — Select a region, **Ctrl+C** copies it to an internal buffer (and system clipboard). **Ctrl+V** pastes the buffer at the cursor. Behaves like a spreadsheet. Falls back to system clipboard paste when no internal buffer exists.
 2. **Renamed toolbar button** — "Copy" is now "Export to Clipboard" for clarity.
+
+## [2026-04-23] lint | Wiki health check and cleanup
+
+Ran a full lint pass on the wiki. Issues found and fixed:
+- Moved shipped features (grid selection, internal copy/paste) out of roadmap Future Ideas
+- Corrected stale line-count claim and filename reference in overview
+- Added missing cross-references across all pages
+- Created new pages: [[export]], [[smart-enter]], [[clipboard]]
+- Added missing architectural details (measureEl, CSS vars, user-select, clipBuffer)
+- Added [[AGENTS.md|schema document]] defining wiki conventions and workflows

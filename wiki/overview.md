@@ -6,12 +6,17 @@ A single-file, portable HTML ASCII art editor. Open directly in any browser. No 
 Make it trivial to create, edit, and export ASCII art. The editor should feel like a text editor mapped onto an infinite 2D grid — click to place a cursor, type to draw, pan around freely.
 
 ## Status
-**Functional MVP.** Core editing, import/export, save/load, undo/redo, and clipboard copy all work. The app is a single ~600-line HTML file that opens anywhere.
+**Functional MVP.** Core editing, import/export, save/load, undo/redo, and clipboard copy all work. The app is a single self-contained HTML file that opens anywhere.
 
 ## Key Files
-- `ascii-designer.html` — The entire application (CSS + JS inline)
+- `index.html` — The entire application (CSS + JS inline)
 - `design.md` — Original design document capturing session decisions
 - `wiki/` — This knowledge base
+
+## Related
+- [[features]] — Full capability list
+- [[architecture]] — Technical design and data model
+- [[roadmap]] — Known issues and future direction
 
 ## Philosophy
 - **Portability over features.** One file, zero dependencies, works offline.

@@ -9,6 +9,10 @@ The entire application is a single self-contained `.html` file with inline CSS a
 - **Characters** rendered as absolutely positioned `<span>` elements, but only for cells inside the current viewport (virtualized rendering).
 - **Camera** stored as cell offsets (`camRow`, `camCol`). Panning adjusts these offsets; rendering translates the visible subset into screen coordinates.
 
+## Rendering Details
+- **Grid sizing** is dynamic. A hidden `<span id="measure">M</span>` measures actual font metrics, and CSS custom properties (`--cell-w`, `--cell-h`, `--font-size`) drive the grid pattern and cell positioning.
+- **`user-select: none`** and `-webkit-user-select: none` on the viewport prevent browser text selection during drag interactions.
+
 ## Data Model
 - Sparse `Map` keyed by `"row,col"` strings storing single characters.
 - Empty/absent cells are truly empty.
@@ -22,6 +26,7 @@ All state lives in simple module-level variables:
 - `camRow`, `camCol` — camera/viewport offset
 - `fontSize`, `cellW`, `cellH` — typography metrics
 - `historyStack`, `historyIdx` — undo/redo snapshots
+- `clipBuffer` — internal copy buffer for structured grid copy/paste (see [[clipboard]])
 
 There is no framework; state changes call `render()` directly.
 
@@ -34,3 +39,5 @@ The export algorithm computes a bounding box from non-whitespace characters:
 - **Right edge is per-row**: each row is trimmed to its last non-whitespace character.
 - All rows between `minRow` and `maxRow` are exported. Empty rows become blank lines.
 - Stored characters (including intentional spaces) inside the per-row window are preserved.
+
+See [[export]] for the full algorithm and rationale.

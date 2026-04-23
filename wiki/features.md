@@ -4,7 +4,7 @@
 - **Overwrite typing** — Type a character to place it at the cursor and advance right.
 - **Block cursor** — Blinking cursor that fills the current cell.
 - **Arrow key navigation** — Move cursor cell-by-cell; camera follows to keep cursor visible.
-- **Smart Enter** — Returns to the first populated cell of the current row, then moves down. Falls back to current column if the row is empty.
+- **Smart Enter** — Returns to the first populated cell of the current row, then moves down. Falls back to current column if the row is empty. See [[smart-enter]].
 - **Backspace / Delete** — Erase the current cursor cell, or all cells in the current selection if one is active.
 - **Escape** — Clears the current grid selection.
 - **Tab** — Inserts two spaces.
@@ -18,11 +18,11 @@
 
 ## Import / Copy-Paste
 - **Import Text button** — Opens a modal textarea; text is inserted at the current cursor position, line-by-line.
-- **Internal copy/paste** — Select a region, then **Ctrl+C** to copy it to an internal buffer (also writes to system clipboard). **Ctrl+V** pastes the buffer starting at the cursor. Works like a spreadsheet.
+- **Internal copy/paste** — Select a region, then **Ctrl+C** to copy it to an internal buffer (also writes to system clipboard). **Ctrl+V** pastes the buffer starting at the cursor. Works like a spreadsheet. See [[clipboard]].
 - **System clipboard paste** — When no internal copy buffer exists, **Ctrl+V** reads from the system clipboard and inserts plain text at the cursor.
 
 ## Export
-- **Export .txt** — Downloads a `.txt` file using the bounding-box trim rules (see [[architecture]]).
+- **Export .txt** — Downloads a `.txt` file using the bounding-box trim rules (see [[export]]).
 - **Export to Clipboard** — Copies the trimmed ASCII art directly to the system clipboard.
 
 ## Save / Load
