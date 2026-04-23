@@ -226,6 +226,42 @@
     const fileInput = document.getElementById('file-input');
 
     // === Helpers ===
+    function cellKey(row, col) {
+      return `${row},${col}`;
+    }
+
+    function parseCellKey(key) {
+      return key.split(',').map(Number);
+    }
+
+    function hasSelectionRange() {
+      return selStartRow !== selEndRow || selStartCol !== selEndCol;
+    }
+
+    function isSelectionActive() {
+      return isSelecting || hasSelectionRange();
+    }
+
+    function getSelectionBounds() {
+      return {
+        r1: Math.min(selStartRow, selEndRow),
+        r2: Math.max(selStartRow, selEndRow),
+        c1: Math.min(selStartCol, selEndCol),
+        c2: Math.max(selStartCol, selEndCol)
+      };
+    }
+
+    function getMouseCell(e) {
+      const rect = viewport.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+
+      return {
+        row: camRow + Math.floor(y / cellH),
+        col: camCol + Math.floor(x / cellW)
+      };
+    }
+
     function escapeHtml(str) {
       return str.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
     }
@@ -252,7 +288,7 @@
       let html = '';
       for (let r = startR; r < startR + rows; r++) {
         for (let c = startC; c < startC + cols; c++) {
-          const ch = cells.get(`${r},${c}`);
+          const ch = cells.get(cellKey(r, c));
           if (ch && ch !== ' ') {
             const x = (c - camCol) * cellW;
             const y = (r - camRow) * cellH;
@@ -268,11 +304,8 @@
       cursorEl.style.width = cellW + 'px';
       cursorEl.style.height = cellH + 'px';
 
-      if (isSelecting || (selStartRow !== selEndRow || selStartCol !== selEndCol)) {
-        const r1 = Math.min(selStartRow, selEndRow);
-        const r2 = Math.max(selStartRow, selEndRow);
-        const c1 = Math.min(selStartCol, selEndCol);
-        const c2 = Math.max(selStartCol, selEndCol);
+      if (isSelectionActive()) {
+        const { r1, r2, c1, c2 } = getSelectionBounds();
         const sx = (c1 - camCol) * cellW;
         const sy = (r1 - camRow) * cellH;
         const sw = (c2 - c1 + 1) * cellW;
@@ -286,11 +319,8 @@
       }
 
       let status = `Row: ${cursorRow}  Col: ${cursorCol}  Cells: ${cells.size}`;
-      if (isSelecting || (selStartRow !== selEndRow || selStartCol !== selEndCol)) {
-        const r1 = Math.min(selStartRow, selEndRow);
-        const r2 = Math.max(selStartRow, selEndRow);
-        const c1 = Math.min(selStartCol, selEndCol);
-        const c2 = Math.max(selStartCol, selEndCol);
+      if (isSelectionActive()) {
+        const { r1, r2, c1, c2 } = getSelectionBounds();
         status += `  Sel: ${r2 - r1 + 1}x${c2 - c1 + 1}`;
       }
       statusEl.textContent = status;
@@ -313,7 +343,7 @@
     }
 
     function insertChar(ch) {
-      cells.set(`${cursorRow},${cursorCol}`, ch);
+      cells.set(cellKey(cursorRow, cursorCol), ch);
       cursorCol++;
       ensureCursorVisible();
       render();
@@ -322,7 +352,7 @@
     function handleEnter() {
       let firstCol = null;
       for (const [key, val] of cells) {
-        const [r, c] = key.split(',').map(Number);
+        const [r, c] = parseCellKey(key);
         if (r === cursorRow && val.trim() !== '') {
           if (firstCol === null || c < firstCol) firstCol = c;
         }
@@ -342,13 +372,10 @@
     }
 
     function deleteSelection() {
-      const r1 = Math.min(selStartRow, selEndRow);
-      const r2 = Math.max(selStartRow, selEndRow);
-      const c1 = Math.min(selStartCol, selEndCol);
-      const c2 = Math.max(selStartCol, selEndCol);
+      const { r1, r2, c1, c2 } = getSelectionBounds();
       for (let r = r1; r <= r2; r++) {
         for (let c = c1; c <= c2; c++) {
-          cells.delete(`${r},${c}`);
+          cells.delete(cellKey(r, c));
         }
       }
       clearSelection();
@@ -356,17 +383,14 @@
     }
 
     function copySelection() {
-      const r1 = Math.min(selStartRow, selEndRow);
-      const r2 = Math.max(selStartRow, selEndRow);
-      const c1 = Math.min(selStartCol, selEndCol);
-      const c2 = Math.max(selStartCol, selEndCol);
+      const { r1, r2, c1, c2 } = getSelectionBounds();
       const buf = new Map();
       const lines = [];
       for (let r = r1; r <= r2; r++) {
         let line = '';
         for (let c = c1; c <= c2; c++) {
-          const ch = cells.get(`${r},${c}`) || ' ';
-          buf.set(`${r - r1},${c - c1}`, ch);
+          const ch = cells.get(cellKey(r, c)) || ' ';
+          buf.set(cellKey(r - r1, c - c1), ch);
           line += ch;
         }
         lines.push(line);
@@ -378,8 +402,8 @@
     function pasteBuffer() {
       if (!clipBuffer) return;
       for (const [key, ch] of clipBuffer.cells) {
-        const [dr, dc] = key.split(',').map(Number);
-        cells.set(`${cursorRow + dr},${cursorCol + dc}`, ch);
+        const [dr, dc] = parseCellKey(key);
+        cells.set(cellKey(cursorRow + dr, cursorCol + dc), ch);
       }
       clearSelection();
       render();
@@ -392,7 +416,7 @@
       lines.forEach((line, i) => {
         const r = startR + i;
         for (let j = 0; j < line.length; j++) {
-          cells.set(`${r},${startC + j}`, line[j]);
+          cells.set(cellKey(r, startC + j), line[j]);
         }
       });
       render();
@@ -403,7 +427,7 @@
       const rowMap = new Map();
       let minR = Infinity, maxR = -Infinity, minC = Infinity;
       for (const [key, val] of cells) {
-        const [r, c] = key.split(',').map(Number);
+        const [r, c] = parseCellKey(key);
         if (val.trim() === '') continue;
         minR = Math.min(minR, r);
         maxR = Math.max(maxR, r);
@@ -429,7 +453,7 @@
         }
         let line = '';
         for (let c = minC; c <= maxC; c++) {
-          line += cells.get(`${r},${c}`) || ' ';
+          line += cells.get(cellKey(r, c)) || ' ';
         }
         lines.push(line);
       }
@@ -503,7 +527,7 @@
         }
         if (e.key === 'c') {
           e.preventDefault();
-          if (selStartRow !== selEndRow || selStartCol !== selEndCol) {
+          if (hasSelectionRange()) {
             const text = copySelection();
             navigator.clipboard.writeText(text).catch(() => {});
             statusEl.textContent = 'Selection copied.';
@@ -537,7 +561,7 @@
 
       snapshot();
 
-      if (isSelecting || selStartRow !== selEndRow || selStartCol !== selEndCol) {
+      if (isSelectionActive()) {
         if (e.key === 'Backspace' || e.key === 'Delete') {
           e.preventDefault();
           deleteSelection();
@@ -567,7 +591,7 @@
         case 'Backspace':
         case 'Delete':
           e.preventDefault();
-          cells.delete(`${cursorRow},${cursorCol}`);
+          cells.delete(cellKey(cursorRow, cursorCol));
           render();
           return;
         case 'Enter':
@@ -597,13 +621,11 @@
       dragStartY = e.clientY;
       dragStartCamR = camRow;
       dragStartCamC = camCol;
-      const rect = viewport.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
       if (e.button === 0) {
+        const cell = getMouseCell(e);
         isSelecting = true;
-        selStartRow = camRow + Math.floor(y / cellH);
-        selStartCol = camCol + Math.floor(x / cellW);
+        selStartRow = cell.row;
+        selStartCol = cell.col;
         selEndRow = selStartRow;
         selEndCol = selStartCol;
       }
@@ -621,11 +643,9 @@
       const dy = e.clientY - dragStartY;
       if (Math.abs(dx) > 3 || Math.abs(dy) > 3) hasDragged = true;
       if (mouseDownButton === 0 && isSelecting) {
-        const rect = viewport.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
-        selEndRow = camRow + Math.floor(y / cellH);
-        selEndCol = camCol + Math.floor(x / cellW);
+        const cell = getMouseCell(e);
+        selEndRow = cell.row;
+        selEndCol = cell.col;
         render();
       } else if (mouseDownButton === 2 && hasDragged) {
         camCol = dragStartCamC - Math.round(dx / cellW);
@@ -641,11 +661,9 @@
       if (mouseDownButton === 0) {
         if (!hasDragged) {
           clearSelection();
-          const rect = viewport.getBoundingClientRect();
-          const x = e.clientX - rect.left;
-          const y = e.clientY - rect.top;
-          cursorCol = camCol + Math.floor(x / cellW);
-          cursorRow = camRow + Math.floor(y / cellH);
+          const cell = getMouseCell(e);
+          cursorRow = cell.row;
+          cursorCol = cell.col;
         }
         isSelecting = false;
         render();
