@@ -156,7 +156,7 @@
     <button id="btn-save">Save</button>
     <button id="btn-load">Load</button>
     <button id="btn-export">Export .txt</button>
-    <button id="btn-copy">Copy</button>
+    <button id="btn-copy">Export to Clipboard</button>
     <button id="btn-undo">Undo</button>
     <button id="btn-redo">Redo</button>
     <label>Size: <input type="range" id="font-size" min="8" max="48" value="16"></label>
@@ -208,6 +208,7 @@
     let selStartCol = 0;
     let selEndRow = 0;
     let selEndCol = 0;
+    let clipBuffer = null; // { rows, cols, cells: Map("dr,dc" -> char) }
     const MAX_HISTORY = 50;
     let historyStack = [];
     let historyIdx = -1;
@@ -354,6 +355,36 @@
       render();
     }
 
+    function copySelection() {
+      const r1 = Math.min(selStartRow, selEndRow);
+      const r2 = Math.max(selStartRow, selEndRow);
+      const c1 = Math.min(selStartCol, selEndCol);
+      const c2 = Math.max(selStartCol, selEndCol);
+      const buf = new Map();
+      const lines = [];
+      for (let r = r1; r <= r2; r++) {
+        let line = '';
+        for (let c = c1; c <= c2; c++) {
+          const ch = cells.get(`${r},${c}`) || ' ';
+          buf.set(`${r - r1},${c - c1}`, ch);
+          line += ch;
+        }
+        lines.push(line);
+      }
+      clipBuffer = { rows: r2 - r1 + 1, cols: c2 - c1 + 1, cells: buf };
+      return lines.join('\n');
+    }
+
+    function pasteBuffer() {
+      if (!clipBuffer) return;
+      for (const [key, ch] of clipBuffer.cells) {
+        const [dr, dc] = key.split(',').map(Number);
+        cells.set(`${cursorRow + dr},${cursorCol + dc}`, ch);
+      }
+      clearSelection();
+      render();
+    }
+
     function importText(text) {
       const lines = text.split('\n');
       const startR = cursorRow;
@@ -468,6 +499,30 @@
         if (e.key === 'y') {
           e.preventDefault();
           redo();
+          return;
+        }
+        if (e.key === 'c') {
+          e.preventDefault();
+          if (selStartRow !== selEndRow || selStartCol !== selEndCol) {
+            const text = copySelection();
+            navigator.clipboard.writeText(text).catch(() => {});
+            statusEl.textContent = 'Selection copied.';
+          }
+          return;
+        }
+        if (e.key === 'v') {
+          e.preventDefault();
+          if (clipBuffer) {
+            snapshot();
+            pasteBuffer();
+          } else {
+            navigator.clipboard.readText().then(text => {
+              if (text) {
+                snapshot();
+                importText(text);
+              }
+            }).catch(() => {});
+          }
           return;
         }
         return;

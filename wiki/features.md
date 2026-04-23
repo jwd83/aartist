@@ -16,13 +16,14 @@
 - **Grid selection** — Left-click and drag to select a rectangular region of cells. Selection shown with blue highlight.
 - **Font size slider** — Adjusts grid zoom dynamically (8px–48px).
 
-## Import
+## Import / Copy-Paste
 - **Import Text button** — Opens a modal textarea; text is inserted at the current cursor position, line-by-line.
-- **Clipboard paste (Ctrl+V)** — Intercepted when the canvas is focused; inserts plain text at cursor.
+- **Internal copy/paste** — Select a region, then **Ctrl+C** to copy it to an internal buffer (also writes to system clipboard). **Ctrl+V** pastes the buffer starting at the cursor. Works like a spreadsheet.
+- **System clipboard paste** — When no internal copy buffer exists, **Ctrl+V** reads from the system clipboard and inserts plain text at the cursor.
 
 ## Export
 - **Export .txt** — Downloads a `.txt` file using the bounding-box trim rules (see [[architecture]]).
-- **Copy** — Copies the trimmed ASCII art directly to the system clipboard.
+- **Export to Clipboard** — Copies the trimmed ASCII art directly to the system clipboard.
 
 ## Save / Load
 - **Save** — Downloads a JSON blob containing the full cell map, camera position, cursor position, and font size.

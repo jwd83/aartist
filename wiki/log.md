@@ -28,3 +28,8 @@ Major interaction overhaul:
    - Right-click drag = pan camera
    - Shift+wheel = horizontal pan
 4. **Selection operations** — Escape clears selection. Backspace/Delete clears all cells inside the active selection.
+
+## [2026-04-22] feature | Internal copy/paste + rename
+
+1. **Internal copy/paste** — Select a region, **Ctrl+C** copies it to an internal buffer (and system clipboard). **Ctrl+V** pastes the buffer at the cursor. Behaves like a spreadsheet. Falls back to system clipboard paste when no internal buffer exists.
+2. **Renamed toolbar button** — "Copy" is now "Export to Clipboard" for clarity.
