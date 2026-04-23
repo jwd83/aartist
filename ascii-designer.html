@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ASCII Art Designer</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    height: 100%;
+    overflow: hidden;
+    background: #111;
+    color: #eee;
+    font-family: 'Courier New', Courier, monospace;
+  }
+  body {
+    display: flex;
+    flex-direction: column;
+  }
+  #toolbar {
+    display: flex;
+    gap: 8px;
+    padding: 8px 12px;
+    background: #1e1e1e;
+    border-bottom: 1px solid #333;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  #toolbar button, #toolbar label {
+    background: #2a2a2a;
+    color: #eee;
+    border: 1px solid #444;
+    padding: 5px 10px;
+    font-family: inherit;
+    font-size: 13px;
+    cursor: pointer;
+    border-radius: 3px;
+  }
+  #toolbar button:hover { background: #3a3a3a; }
+  #toolbar input[type="range"] { vertical-align: middle; margin-left: 6px; }
+  #viewport-wrap {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+  }
+  #viewport {
+    position: absolute;
+    inset: 0;
+    background-color: #1a1a1a;
+    background-image:
+      linear-gradient(to right, #2a2a2a 1px, transparent 1px),
+      linear-gradient(to bottom, #2a2a2a 1px, transparent 1px);
+    background-size: var(--cell-w, 10px) var(--cell-h, 20px);
+    cursor: crosshair;
+    outline: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  .cell {
+    position: absolute;
+    width: var(--cell-w, 10px);
+    height: var(--cell-h, 20px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #eee;
+    font-family: inherit;
+    font-size: var(--font-size, 16px);
+    pointer-events: none;
+    white-space: pre;
+  }
+  #cursor {
+    position: absolute;
+    background: rgba(255, 255, 255, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    pointer-events: none;
+    animation: blink 1s step-end infinite;
+    z-index: 10;
+  }
+  @keyframes blink {
+    50% { opacity: 0; }
+  }
+  #selection {
+    position: absolute;
+    background: rgba(100, 149, 237, 0.25);
+    border: 1px solid rgba(100, 149, 237, 0.5);
+    pointer-events: none;
+    z-index: 9;
+    display: none;
+  }
+  #statusbar {
+    padding: 5px 12px;
+    background: #1e1e1e;
+    border-top: 1px solid #333;
+    font-size: 12px;
+    color: #888;
+  }
+  #modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.75);
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+  }
+  #modal-overlay.active { display: flex; }
+  #modal {
+    background: #222;
+    border: 1px solid #555;
+    padding: 20px;
+    width: 520px;
+    max-width: 90vw;
+    border-radius: 4px;
+  }
+  #modal h3 { margin-bottom: 10px; font-size: 16px; }
+  #modal textarea {
+    width: 100%;
+    height: 240px;
+    background: #111;
+    color: #eee;
+    border: 1px solid #444;
+    padding: 10px;
+    font-family: inherit;
+    font-size: 13px;
+    resize: vertical;
+    border-radius: 3px;
+  }
+  #modal .buttons {
+    margin-top: 12px;
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+  }
+  #modal .buttons button {
+    background: #2a2a2a;
+    color: #eee;
+    border: 1px solid #444;
+    padding: 6px 14px;
+    font-family: inherit;
+    cursor: pointer;
+    border-radius: 3px;
+  }
+  #modal .buttons button:hover { background: #3a3a3a; }
+  #measure {
+    position: absolute;
+    visibility: hidden;
+    white-space: pre;
+    font-family: inherit;
+  }
+</style>
+</head>
+<body>
+  <div id="toolbar">
+    <button id="btn-paste">Import Text</button>
+    <button id="btn-save">Save</button>
+    <button id="btn-load">Load</button>
+    <button id="btn-export">Export .txt</button>
+    <button id="btn-copy">Copy</button>
+    <button id="btn-undo">Undo</button>
+    <button id="btn-redo">Redo</button>
+    <label>Size: <input type="range" id="font-size" min="8" max="48" value="16"></label>
+  </div>
+
+  <div id="viewport-wrap">
+    <div id="viewport" tabindex="0">
+      <div id="overlay"></div>
+      <div id="selection"></div>
+      <div id="cursor"></div>
+      <span id="measure">M</span>
+    </div>
+  </div>
+
+  <div id="statusbar">Ready</div>
+
+  <div id="modal-overlay">
+    <div id="modal">
+      <h3>Import Text</h3>
+      <textarea id="paste-area" placeholder="Paste ASCII art here..."></textarea>
+      <div class="buttons">
+        <button id="btn-cancel">Cancel</button>
+        <button id="btn-insert">Insert at Cursor</button>
+      </div>
+    </div>
+  </div>
+
+  <input type="file" id="file-input" accept=".json" style="display:none">
+
+  <script>
+    // === State ===
+    const cells = new Map();
+    let cursorRow = 0;
+    let cursorCol = 0;
+    let camRow = 0;
+    let camCol = 0;
+    let fontSize = 16;
+    let cellW = 10;
+    let cellH = 20;
+    let isMouseDown = false;
+    let hasDragged = false;
+    let dragStartX = 0;
+    let dragStartY = 0;
+    let dragStartCamR = 0;
+    let dragStartCamC = 0;
+    let mouseDownButton = -1;
+    let isSelecting = false;
+    let selStartRow = 0;
+    let selStartCol = 0;
+    let selEndRow = 0;
+    let selEndCol = 0;
+    const MAX_HISTORY = 50;
+    let historyStack = [];
+    let historyIdx = -1;
+
+    // === DOM ===
+    const viewport = document.getElementById('viewport');
+    const overlay = document.getElementById('overlay');
+    const cursorEl = document.getElementById('cursor');
+    const statusEl = document.getElementById('statusbar');
+    const fontSlider = document.getElementById('font-size');
+    const modalOverlay = document.getElementById('modal-overlay');
+    const pasteArea = document.getElementById('paste-area');
+    const measureEl = document.getElementById('measure');
+    const selectionEl = document.getElementById('selection');
+    const fileInput = document.getElementById('file-input');
+
+    // === Helpers ===
+    function escapeHtml(str) {
+      return str.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+    }
+
+    function updateFont() {
+      measureEl.style.fontSize = fontSize + 'px';
+      const rect = measureEl.getBoundingClientRect();
+      cellW = Math.round(rect.width);
+      cellH = Math.round(rect.height);
+      viewport.style.setProperty('--font-size', fontSize + 'px');
+      viewport.style.setProperty('--cell-w', cellW + 'px');
+      viewport.style.setProperty('--cell-h', cellH + 'px');
+    }
+
+    function getVisibleRange() {
+      const wrap = document.getElementById('viewport-wrap');
+      const cols = Math.ceil(wrap.clientWidth / cellW) + 1;
+      const rows = Math.ceil(wrap.clientHeight / cellH) + 1;
+      return { startR: camRow, startC: camCol, rows, cols };
+    }
+
+    function render() {
+      const { startR, startC, rows, cols } = getVisibleRange();
+      let html = '';
+      for (let r = startR; r < startR + rows; r++) {
+        for (let c = startC; c < startC + cols; c++) {
+          const ch = cells.get(`${r},${c}`);
+          if (ch && ch !== ' ') {
+            const x = (c - camCol) * cellW;
+            const y = (r - camRow) * cellH;
+            html += `<span class="cell" style="left:${x}px;top:${y}px">${escapeHtml(ch)}</span>`;
+          }
+        }
+      }
+      overlay.innerHTML = html;
+
+      const curX = (cursorCol - camCol) * cellW;
+      const curY = (cursorRow - camRow) * cellH;
+      cursorEl.style.transform = `translate(${curX}px, ${curY}px)`;
+      cursorEl.style.width = cellW + 'px';
+      cursorEl.style.height = cellH + 'px';
+
+      if (isSelecting || (selStartRow !== selEndRow || selStartCol !== selEndCol)) {
+        const r1 = Math.min(selStartRow, selEndRow);
+        const r2 = Math.max(selStartRow, selEndRow);
+        const c1 = Math.min(selStartCol, selEndCol);
+        const c2 = Math.max(selStartCol, selEndCol);
+        const sx = (c1 - camCol) * cellW;
+        const sy = (r1 - camRow) * cellH;
+        const sw = (c2 - c1 + 1) * cellW;
+        const sh = (r2 - r1 + 1) * cellH;
+        selectionEl.style.display = 'block';
+        selectionEl.style.transform = `translate(${sx}px, ${sy}px)`;
+        selectionEl.style.width = sw + 'px';
+        selectionEl.style.height = sh + 'px';
+      } else {
+        selectionEl.style.display = 'none';
+      }
+
+      let status = `Row: ${cursorRow}  Col: ${cursorCol}  Cells: ${cells.size}`;
+      if (isSelecting || (selStartRow !== selEndRow || selStartCol !== selEndCol)) {
+        const r1 = Math.min(selStartRow, selEndRow);
+        const r2 = Math.max(selStartRow, selEndRow);
+        const c1 = Math.min(selStartCol, selEndCol);
+        const c2 = Math.max(selStartCol, selEndCol);
+        status += `  Sel: ${r2 - r1 + 1}x${c2 - c1 + 1}`;
+      }
+      statusEl.textContent = status;
+    }
+
+    function ensureCursorVisible() {
+      const { rows, cols } = getVisibleRange();
+      const margin = 2;
+      if (cursorCol < camCol + margin) camCol = cursorCol - margin;
+      if (cursorCol > camCol + cols - 1 - margin) camCol = cursorCol - cols + 1 + margin;
+      if (cursorRow < camRow + margin) camRow = cursorRow - margin;
+      if (cursorRow > camRow + rows - 1 - margin) camRow = cursorRow - rows + 1 + margin;
+    }
+
+    function moveCursor(dr, dc) {
+      cursorRow += dr;
+      cursorCol += dc;
+      ensureCursorVisible();
+      render();
+    }
+
+    function insertChar(ch) {
+      cells.set(`${cursorRow},${cursorCol}`, ch);
+      cursorCol++;
+      ensureCursorVisible();
+      render();
+    }
+
+    function handleEnter() {
+      let firstCol = null;
+      for (const [key, val] of cells) {
+        const [r, c] = key.split(',').map(Number);
+        if (r === cursorRow && val.trim() !== '') {
+          if (firstCol === null || c < firstCol) firstCol = c;
+        }
+      }
+      if (firstCol !== null) cursorCol = firstCol;
+      cursorRow++;
+      ensureCursorVisible();
+      render();
+    }
+
+    function clearSelection() {
+      isSelecting = false;
+      selStartRow = cursorRow;
+      selStartCol = cursorCol;
+      selEndRow = cursorRow;
+      selEndCol = cursorCol;
+    }
+
+    function deleteSelection() {
+      const r1 = Math.min(selStartRow, selEndRow);
+      const r2 = Math.max(selStartRow, selEndRow);
+      const c1 = Math.min(selStartCol, selEndCol);
+      const c2 = Math.max(selStartCol, selEndCol);
+      for (let r = r1; r <= r2; r++) {
+        for (let c = c1; c <= c2; c++) {
+          cells.delete(`${r},${c}`);
+        }
+      }
+      clearSelection();
+      render();
+    }
+
+    function importText(text) {
+      const lines = text.split('\n');
+      const startR = cursorRow;
+      const startC = cursorCol;
+      lines.forEach((line, i) => {
+        const r = startR + i;
+        for (let j = 0; j < line.length; j++) {
+          cells.set(`${r},${startC + j}`, line[j]);
+        }
+      });
+      render();
+    }
+
+    // === Export ===
+    function exportText() {
+      const rowMap = new Map();
+      let minR = Infinity, maxR = -Infinity, minC = Infinity;
+      for (const [key, val] of cells) {
+        const [r, c] = key.split(',').map(Number);
+        if (val.trim() === '') continue;
+        minR = Math.min(minR, r);
+        maxR = Math.max(maxR, r);
+        minC = Math.min(minC, c);
+        if (!rowMap.has(r)) rowMap.set(r, new Map());
+        rowMap.get(r).set(c, val);
+      }
+      if (minR === Infinity) return '';
+      const lines = [];
+      for (let r = minR; r <= maxR; r++) {
+        const cols = rowMap.get(r);
+        if (!cols) {
+          lines.push('');
+          continue;
+        }
+        let maxC = -Infinity;
+        for (const [c, val] of cols) {
+          if (val.trim() !== '') maxC = Math.max(maxC, c);
+        }
+        if (maxC === -Infinity) {
+          lines.push('');
+          continue;
+        }
+        let line = '';
+        for (let c = minC; c <= maxC; c++) {
+          line += cells.get(`${r},${c}`) || ' ';
+        }
+        lines.push(line);
+      }
+      return lines.join('\n');
+    }
+
+    function download(data, filename, type) {
+      const blob = new Blob([data], { type });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    // === Undo / Redo ===
+    function snapshot() {
+      historyStack = historyStack.slice(0, historyIdx + 1);
+      const state = {
+        cells: Array.from(cells.entries()),
+        cursorRow, cursorCol, camRow, camCol, fontSize
+      };
+      historyStack.push(JSON.stringify(state));
+      if (historyStack.length > MAX_HISTORY) historyStack.shift();
+      historyIdx = historyStack.length - 1;
+    }
+
+    function restore(json) {
+      const state = JSON.parse(json);
+      cells.clear();
+      state.cells.forEach(([k, v]) => cells.set(k, v));
+      cursorRow = state.cursorRow;
+      cursorCol = state.cursorCol;
+      camRow = state.camRow;
+      camCol = state.camCol;
+      fontSize = state.fontSize;
+      fontSlider.value = fontSize;
+      updateFont();
+      render();
+    }
+
+    function undo() {
+      if (historyIdx > 0) {
+        historyIdx--;
+        restore(historyStack[historyIdx]);
+      }
+    }
+
+    function redo() {
+      if (historyIdx < historyStack.length - 1) {
+        historyIdx++;
+        restore(historyStack[historyIdx]);
+      }
+    }
+
+    // === Events ===
+    document.addEventListener('keydown', (e) => {
+      if (modalOverlay.classList.contains('active')) return;
+
+      if (e.ctrlKey || e.metaKey) {
+        if (e.key === 'z') {
+          e.preventDefault();
+          if (e.shiftKey) redo(); else undo();
+          return;
+        }
+        if (e.key === 'y') {
+          e.preventDefault();
+          redo();
+          return;
+        }
+        return;
+      }
+
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        clearSelection();
+        render();
+        return;
+      }
+
+      snapshot();
+
+      if (isSelecting || selStartRow !== selEndRow || selStartCol !== selEndCol) {
+        if (e.key === 'Backspace' || e.key === 'Delete') {
+          e.preventDefault();
+          deleteSelection();
+          return;
+        }
+        clearSelection();
+        render();
+      }
+
+      switch (e.key) {
+        case 'ArrowUp':
+          e.preventDefault();
+          moveCursor(-1, 0);
+          return;
+        case 'ArrowDown':
+          e.preventDefault();
+          moveCursor(1, 0);
+          return;
+        case 'ArrowLeft':
+          e.preventDefault();
+          moveCursor(0, -1);
+          return;
+        case 'ArrowRight':
+          e.preventDefault();
+          moveCursor(0, 1);
+          return;
+        case 'Backspace':
+        case 'Delete':
+          e.preventDefault();
+          cells.delete(`${cursorRow},${cursorCol}`);
+          render();
+          return;
+        case 'Enter':
+          e.preventDefault();
+          handleEnter();
+          return;
+        case 'Tab':
+          e.preventDefault();
+          insertChar(' ');
+          insertChar(' ');
+          return;
+        default:
+          if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
+            e.preventDefault();
+            insertChar(e.key);
+          }
+      }
+    });
+
+    viewport.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      if (e.button !== 0 && e.button !== 2) return;
+      isMouseDown = true;
+      hasDragged = false;
+      mouseDownButton = e.button;
+      dragStartX = e.clientX;
+      dragStartY = e.clientY;
+      dragStartCamR = camRow;
+      dragStartCamC = camCol;
+      const rect = viewport.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      if (e.button === 0) {
+        isSelecting = true;
+        selStartRow = camRow + Math.floor(y / cellH);
+        selStartCol = camCol + Math.floor(x / cellW);
+        selEndRow = selStartRow;
+        selEndCol = selStartCol;
+      }
+      viewport.style.cursor = e.button === 2 ? 'grabbing' : 'crosshair';
+      viewport.focus();
+    });
+
+    viewport.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (!isMouseDown) return;
+      const dx = e.clientX - dragStartX;
+      const dy = e.clientY - dragStartY;
+      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) hasDragged = true;
+      if (mouseDownButton === 0 && isSelecting) {
+        const rect = viewport.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        selEndRow = camRow + Math.floor(y / cellH);
+        selEndCol = camCol + Math.floor(x / cellW);
+        render();
+      } else if (mouseDownButton === 2 && hasDragged) {
+        camCol = dragStartCamC - Math.round(dx / cellW);
+        camRow = dragStartCamR - Math.round(dy / cellH);
+        render();
+      }
+    });
+
+    window.addEventListener('mouseup', (e) => {
+      if (!isMouseDown) return;
+      isMouseDown = false;
+      viewport.style.cursor = 'crosshair';
+      if (mouseDownButton === 0) {
+        if (!hasDragged) {
+          clearSelection();
+          const rect = viewport.getBoundingClientRect();
+          const x = e.clientX - rect.left;
+          const y = e.clientY - rect.top;
+          cursorCol = camCol + Math.floor(x / cellW);
+          cursorRow = camRow + Math.floor(y / cellH);
+        }
+        isSelecting = false;
+        render();
+      }
+      mouseDownButton = -1;
+    });
+
+    viewport.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      if (e.shiftKey) {
+        const dx = e.deltaY > 0 ? 3 : -3;
+        camCol += dx;
+      } else {
+        const dy = e.deltaY > 0 ? 3 : -3;
+        camRow += dy;
+      }
+      render();
+    }, { passive: false });
+
+    document.addEventListener('paste', (e) => {
+      if (modalOverlay.classList.contains('active')) return;
+      e.preventDefault();
+      const text = e.clipboardData.getData('text/plain');
+      if (text) {
+        snapshot();
+        importText(text);
+      }
+    });
+
+    // === Toolbar ===
+    document.getElementById('btn-paste').addEventListener('click', () => {
+      pasteArea.value = '';
+      modalOverlay.classList.add('active');
+      pasteArea.focus();
+    });
+
+    document.getElementById('btn-cancel').addEventListener('click', () => {
+      modalOverlay.classList.remove('active');
+      viewport.focus();
+    });
+
+    document.getElementById('btn-insert').addEventListener('click', () => {
+      const text = pasteArea.value;
+      if (text) {
+        snapshot();
+        importText(text);
+      }
+      modalOverlay.classList.remove('active');
+      viewport.focus();
+    });
+
+    document.getElementById('btn-save').addEventListener('click', () => {
+      const state = {
+        cells: Array.from(cells.entries()),
+        cursorRow, cursorCol, camRow, camCol, fontSize
+      };
+      download(JSON.stringify(state, null, 2), 'ascii-art.json', 'application/json');
+    });
+
+    document.getElementById('btn-load').addEventListener('click', () => {
+      fileInput.click();
+    });
+
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        try {
+          const state = JSON.parse(ev.target.result);
+          snapshot();
+          cells.clear();
+          state.cells.forEach(([k, v]) => cells.set(k, v));
+          cursorRow = state.cursorRow || 0;
+          cursorCol = state.cursorCol || 0;
+          camRow = state.camRow || 0;
+          camCol = state.camCol || 0;
+          fontSize = state.fontSize || 16;
+          fontSlider.value = fontSize;
+          updateFont();
+          render();
+        } catch (err) {
+          alert('Invalid save file.');
+        }
+      };
+      reader.readAsText(file);
+      fileInput.value = '';
+    });
+
+    document.getElementById('btn-export').addEventListener('click', () => {
+      const text = exportText();
+      if (text === '') {
+        alert('Nothing to export.');
+        return;
+      }
+      download(text, 'ascii-art.txt', 'text/plain');
+    });
+
+    document.getElementById('btn-copy').addEventListener('click', async () => {
+      const text = exportText();
+      if (text === '') {
+        alert('Nothing to copy.');
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(text);
+        statusEl.textContent = 'Copied to clipboard.';
+      } catch (err) {
+        alert('Failed to copy to clipboard.');
+      }
+    });
+
+    document.getElementById('btn-undo').addEventListener('click', undo);
+    document.getElementById('btn-redo').addEventListener('click', redo);
+
+    fontSlider.addEventListener('input', (e) => {
+      fontSize = parseInt(e.target.value, 10);
+      updateFont();
+      render();
+    });
+
+    window.addEventListener('resize', render);
+
+    // === Init ===
+    updateFont();
+    snapshot();
+    render();
+    viewport.focus();
+  </script>
+</body>
+</html>
